@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: peblo_postgres
+    environment:
+      POSTGRES_USER: peblo
+      POSTGRES_PASSWORD: peblo_password
+      POSTGRES_DB: peblo_tv
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U peblo -d peblo_tv"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: peblo_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://peblo:peblo_password@postgres:5432/peblo_tv
+      DATABASE_ECHO: "false"
+      STORAGE_BACKEND: local
+      STORAGE_LOCAL_DIR: /app/storage
+      STORAGE_PUBLIC_URL_BASE: http://localhost:8000/storage
+      ADMIN_API_KEY: peblo-admin-secret-key
+      EDITOR_API_KEY: peblo-editor-secret-key
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./assets:/app/assets
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: peblo_frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
